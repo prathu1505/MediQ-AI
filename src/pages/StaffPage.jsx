@@ -103,6 +103,142 @@ export default function StaffPage({ initialTab = 'reception' }) {
     handleActionToast(res.message)
   }
 
+  const handleExportPDF = () => {
+    const printWindow = window.open('', '_blank')
+
+    if (!printWindow) {
+      handleActionToast('Please allow pop-ups to download the PDF.')
+      return
+    }
+
+    const escapeHTML = (value) =>
+      String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[char])
+
+    const patientRows = patients.map((p) => `
+      <tr>
+        <td>${escapeHTML(p.token)}</td>
+        <td>${escapeHTML(p.patientName)}</td>
+        <td>${escapeHTML(p.hospital)}</td>
+        <td>${escapeHTML(p.department)}</td>
+        <td>${escapeHTML(p.doctor)}</td>
+        <td>${escapeHTML(p.room)}</td>
+        <td>${escapeHTML(p.bookingType)}</td>
+        <td>${escapeHTML(p.arrivalStatus)}</td>
+        <td>${escapeHTML(p.status)}</td>
+      </tr>
+    `).join('')
+
+    const logRows = auditLogs.map((log) => `
+      <tr>
+        <td>${escapeHTML(log.timestamp)}</td>
+        <td>${escapeHTML(log.token)}</td>
+        <td>${escapeHTML(log.actor)}</td>
+        <td>${escapeHTML(log.action)}</td>
+        <td>${escapeHTML(log.details)}</td>
+        <td>${escapeHTML(log.previousStatus)} → ${escapeHTML(log.newStatus)}</td>
+      </tr>
+    `).join('')
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>MediQ AI - Hospital Records</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 25px;
+            color: #1e293b;
+          }
+          h1 { color: #0f766e; }
+          h2 {
+            margin-top: 30px;
+            color: #0f766e;
+          }
+          p { color: #64748b; font-size: 12px; }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 10px;
+          }
+          th, td {
+            border: 1px solid #cbd5e1;
+            padding: 7px;
+            text-align: left;
+            overflow-wrap: anywhere;
+          }
+          th {
+            background: #ccfbf1;
+            color: #134e4a;
+          }
+          tr { page-break-inside: avoid; }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>MediQ AI - Hospital Records</h1>
+        <p>Generated on: ${escapeHTML(new Date().toLocaleString())}</p>
+        <p>Total Patient Records: ${patients.length}</p>
+        <p>Total Audit Events: ${auditLogs.length}</p>
+
+        <h2>Patient Records</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Patient</th>
+              <th>Hospital</th>
+              <th>Department</th>
+              <th>Doctor</th>
+              <th>Room</th>
+              <th>Booking</th>
+              <th>Arrival</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${patientRows || '<tr><td colspan="9">No patient records found</td></tr>'}
+          </tbody>
+        </table>
+
+        <h2>System Audit Logs</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Token</th>
+              <th>Actor</th>
+              <th>Action</th>
+              <th>Details</th>
+              <th>Status Transition</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logRows || '<tr><td colspan="6">No audit logs found</td></tr>'}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `)
+
+    printWindow.document.close()
+
+    printWindow.onload = () => {
+      printWindow.focus()
+      printWindow.print()
+    }
+  }
+
+
   // Only active patients should appear in operational queues.
   // Completed and cancelled records remain saved for history and audit.
   const isActivePatient = (patient) =>
@@ -959,10 +1095,22 @@ export default function StaffPage({ initialTab = 'reception' }) {
 
           {/* Audit Log */}
           <div className="space-y-3">
-            <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-              <Lock className="w-4 h-4 text-teal-600" />
-              <span>System Audit Log ({auditLogs.length} Records)</span>
-            </h4>
+            
+<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+    <Lock className="w-4 h-4 text-teal-600" />
+    <span>System Audit Log ({auditLogs.length} Records)</span>
+  </h4>
+
+  <button
+    onClick={handleExportPDF}
+    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+  >
+    <FileText className="w-4 h-4" />
+    Download PDF
+  </button>
+</div>
+
 
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
               <div className="overflow-x-auto">

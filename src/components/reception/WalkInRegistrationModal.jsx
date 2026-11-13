@@ -128,7 +128,7 @@ export default function WalkInRegistrationModal({ isOpen, onClose, onRegistered 
       bloodGroup: formData.bloodGroup,
       hospital: formData.hospital,
       department: formData.department,
-      assignedDoctor: formData.assignedDoctor || availableDoctors[0]?.name,
+      assignedDoctor: formData.assignedDoctor || null,
       priority: formData.priority,
       symptoms: formData.symptoms.trim() || 'General walk-in examination',
       aiSuggestedDept: aiSuggestion?.department || null,

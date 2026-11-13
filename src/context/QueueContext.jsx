@@ -715,6 +715,38 @@ useEffect(() => {
     })
   }
 
+  
+  // Automatically select the available doctor with the lowest active queue
+  const getLeastLoadedDoctor = (deptConfig, hospitalName) => {
+    const availableDoctors = deptConfig.doctors.filter(
+      (doc) => doc.status === DoctorStatus.AVAILABLE
+    )
+
+    if (availableDoctors.length === 0) return null
+
+    const doctorLoads = availableDoctors.map((doc) => {
+      const patientCount = patients.filter(
+        (p) =>
+          p.hospital === hospitalName &&
+          p.department === deptConfig.name &&
+          (p.doctorId === doc.id || p.doctor === doc.name) &&
+          ['waiting', 'with_doctor', 'in_triage'].includes(p.status) &&
+          p.slotStatus !== SlotStatus.RELEASED_AVAILABLE &&
+          (
+            p.bookingVerificationStatus === Stage1BookingStatus.VERIFIED ||
+            p.bookingVerificationStatus === Stage1BookingStatus.BYPASSED_EMERGENCY ||
+            p.bookingType === BookingType.WALK_IN
+          )
+      ).length
+
+      return { doctor: doc, count: patientCount }
+    })
+
+    doctorLoads.sort((a, b) => a.count - b.count)
+
+    return doctorLoads[0].doctor
+  }
+
   /**
    * REGISTER WALK-IN PATIENT AT RECEPTION DESK
    */
@@ -738,9 +770,34 @@ useEffect(() => {
     aiConfidence = null,
     staffName = 'Receptionist Desk',
   }) => {
-    const deptConfig = departmentsList.find((d) => d.name === department) || departmentsList[0]
-    const assignedDoc = assignedDoctor || deptConfig.doctors.find((doc) => doc.status === DoctorStatus.AVAILABLE)?.name || deptConfig.doctors[0]?.name || 'On-Call Specialist'
-    const assignedRoom = deptConfig.doctors.find((doc) => doc.name === assignedDoc)?.room || deptConfig.room
+   
+    const deptConfig =
+      departmentsList.find((d) => d.name === department) || departmentsList[0]
+
+    const manuallySelectedDoctor = assignedDoctor
+      ? deptConfig.doctors.find(
+          (doc) =>
+            doc.name === assignedDoctor &&
+            doc.status === DoctorStatus.AVAILABLE
+        )
+      : null
+
+    const selectedDoctor =
+      manuallySelectedDoctor ||
+      getLeastLoadedDoctor(deptConfig, hospital)
+
+    const assignedDoc =
+      selectedDoctor?.name ||
+      deptConfig.doctors[0]?.name ||
+      'On-Call Specialist'
+
+    const assignedRoom =
+      selectedDoctor?.room ||
+      deptConfig.doctors.find(
+        (doc) => doc.name === assignedDoc
+      )?.room ||
+      deptConfig.room
+
     const isEmergency = priority === 'P1'
     const newToken = generateTokenNumber(BookingType.WALK_IN)
     const effectivePatientId = patientId || `PID-${Math.floor(1000 + Math.random() * 9000)}`
@@ -776,6 +833,7 @@ useEffect(() => {
       hospital,
       department,
       doctor: assignedDoc,
+      doctorId: selectedDoctor?.id || null,
       room: assignedRoom,
       priority,
       priorityLabel: priority === 'P1' ? 'Emergency / Trauma' : priority === 'P2' ? 'Urgent' : priority === 'P3' ? 'Semi-Urgent' : 'Standard Care',
@@ -838,9 +896,24 @@ useEffect(() => {
     priority = 'P4',
     symptoms,
   }) => {
-    const deptConfig = departmentsList.find((d) => d.name === department) || departmentsList[0]
-    const assignedDoc = deptConfig.doctors.find((doc) => doc.status === DoctorStatus.AVAILABLE)?.name || deptConfig.doctors[0]?.name || 'Specialist Physician'
-    const assignedRoom = deptConfig.doctors.find((doc) => doc.name === assignedDoc)?.room || deptConfig.room
+    
+    const deptConfig =
+      departmentsList.find((d) => d.name === department) || departmentsList[0]
+
+    const selectedDoctor = getLeastLoadedDoctor(deptConfig, hospital)
+
+    const assignedDoc =
+      selectedDoctor?.name ||
+      deptConfig.doctors[0]?.name ||
+      'On-Call Specialist'
+
+    const assignedRoom =
+      selectedDoctor?.room ||
+      deptConfig.doctors.find(
+        (doc) => doc.name === assignedDoc
+      )?.room ||
+      deptConfig.room
+
     const newToken = generateTokenNumber(BookingType.ONLINE)
     const isEmergency = priority === 'P1'
     const verificationToken = `SEC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
@@ -874,7 +947,9 @@ useEffect(() => {
       hospital,
       department,
       doctor: assignedDoc,
-      room: assignedRoom,
+doctorId: selectedDoctor?.id || null,
+  
+room: assignedRoom,
       priority,
       priorityLabel: priority === 'P1' ? 'Emergency / Trauma' : priority === 'P2' ? 'Urgent' : priority === 'P3' ? 'Semi-Urgent' : 'Standard',
       symptoms: symptoms || 'Online Booking Checkup',
@@ -1055,10 +1130,33 @@ useEffect(() => {
   }) => {
     const p = patients.find((pat) => pat.token === tokenId)
     if (!p) return { success: false, message: 'Patient not found' }
+    const targetDeptConfig =
+  departmentsList.find((d) => d.name === toDept) || departmentsList[0]
 
-    const targetDeptConfig = departmentsList.find((d) => d.name === toDept) || departmentsList[0]
-    const assignedDoc = targetDoctor || targetDeptConfig.doctors.find((d) => d.status === DoctorStatus.AVAILABLE)?.name || targetDeptConfig.doctors[0]?.name || 'Specialist'
-    const assignedRoom = targetDeptConfig.doctors.find((d) => d.name === assignedDoc)?.room || targetDeptConfig.room
+   
+const manuallySelectedDoctor = targetDoctor
+  ? targetDeptConfig.doctors.find(
+      (doc) =>
+        doc.name === targetDoctor &&
+        doc.status === DoctorStatus.AVAILABLE
+    )
+  : null
+
+const selectedDoctor =
+  manuallySelectedDoctor ||
+  getLeastLoadedDoctor(targetDeptConfig, p.hospital)
+
+const assignedDoc =
+  selectedDoctor?.name ||
+  targetDeptConfig.doctors[0]?.name ||
+  'Specialist Physician'
+
+const assignedRoom =
+  selectedDoctor?.room ||
+  targetDeptConfig.doctors.find(
+    (doc) => doc.name === assignedDoc
+  )?.room ||
+  targetDeptConfig.room
 
     // Recalculate wait time in target department
     const targetDeptWaiting = patients.filter(
@@ -1072,8 +1170,9 @@ useEffect(() => {
           return {
             ...pat,
             department: toDept,
-            doctor: assignedDoc,
-            room: assignedRoom,
+           doctor: assignedDoc,
+doctorId: selectedDoctor?.id || null,
+room: assignedRoom,
             estimatedWaitMinutes: newWaitTime,
             status: 'waiting',
             lastTransferredFrom: fromDept,

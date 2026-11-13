@@ -14,6 +14,11 @@ import {
 import { useQueue } from '../context/QueueContext'
 import { Stage1BookingStatus } from '../types'
 
+// Indian mobile number validation
+const isValidIndianMobile = (phone) => {
+  return /^[6-9]\d{9}$/.test(phone)
+}
+
 export default function CheckInPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -67,11 +72,26 @@ export default function CheckInPage() {
 
     if (!formData.patientName.trim()) return
 
+    // Patient mobile number validation
+    if (!isValidIndianMobile(formData.phone.trim())) {
+      alert('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8 or 9.')
+      return
+    }
+
+    // Guardian details and mobile validation
     if (
       formData.isMinor &&
       (!formData.guardianName.trim() || !formData.guardianPhone.trim())
     ) {
       alert('Guardian name and phone number are required for patients under 18.')
+      return
+    }
+
+    if (
+      formData.isMinor &&
+      !isValidIndianMobile(formData.guardianPhone.trim())
+    ) {
+      alert('Please enter a valid 10-digit Indian guardian mobile number starting with 6, 7, 8 or 9.')
       return
     }
 
@@ -367,9 +387,16 @@ export default function CheckInPage() {
                 <input
                   type="tel"
                   required
+                  maxLength={10}
+                  inputMode="numeric"
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Enter mobile number"
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      phone: e.target.value.replace(/\D/g, '').slice(0, 10),
+                    })
+                  }
+                  placeholder="10-digit mobile number"
                   className="w-full px-4 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
                 />
               </div>
@@ -435,9 +462,16 @@ export default function CheckInPage() {
                     <input
                       type="tel"
                       required
+                      maxLength={10}
+                      inputMode="numeric"
                       value={formData.guardianPhone}
-                      onChange={(e) => setFormData({ ...formData, guardianPhone: e.target.value })}
-                      placeholder="Enter guardian phone"
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guardianPhone: e.target.value.replace(/\D/g, '').slice(0, 10),
+                        })
+                      }
+                      placeholder="10-digit guardian number"
                       className="w-full px-3 py-2 text-xs border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                   </div>
