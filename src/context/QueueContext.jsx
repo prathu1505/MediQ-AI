@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import {
   BookingType,
   Stage1BookingStatus,
@@ -18,6 +18,7 @@ import {
   savePatientProfile,
   getLocalProfiles,
 } from '../services/queueDatabaseService'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 export const HOSPITALS = [
   {
@@ -383,8 +384,14 @@ export function QueueProvider({ children }) {
         console.error('Failed to parse saved patients', e)
       }
     }
-    return INITIAL_PATIENTS
+    return []
   })
+  const [queueDatabaseReady, setQueueDatabaseReady] = useState(false)
+
+const queueSyncTimeoutRef = useRef(null)
+const queueChannelRef = useRef(null)
+const isInitialQueueLoadRef = useRef(true)
+const isApplyingRemoteUpdateRef = useRef(false)
 
   // Doctors Roster with Realtime Status
   const [departmentsList, setDepartmentsList] = useState(() => {
@@ -446,9 +453,189 @@ export function QueueProvider({ children }) {
     ]
   })
 
-  useEffect(() => {
-    localStorage.setItem('mediq_patients_v3', JSON.stringify(patients))
-  }, [patients])
+ useEffect(() => {
+  let isMounted = true
+
+  const loadQueueFromSupabase = async () => {
+    if (!isSupabaseConfigured()) {
+      setQueueDatabaseReady(true)
+      return
+    }
+
+    try {
+      // Read this device's existing patients
+      let localPatients = []
+
+      try {
+        const saved = localStorage.getItem('mediq_patients_v3')
+        localPatients = saved ? JSON.parse(saved) : []
+      } catch (error) {
+        console.error('Local queue read failed:', error)
+      }
+
+      // Read shared patients from Supabase
+      const { data, error } = await supabase
+        .from('queue_patients')
+        .select('token, patient_data')
+
+      if (error) throw error
+
+      const DEMO_TOKENS = [
+  'ON-101',
+  'ON-102',
+  'ON-103',
+  'ON-104',
+  'WK-201',
+  'WK-202',
+]
+
+const remotePatients = (data || [])
+  .map((row) => row.patient_data)
+  .filter(
+    (patient) => patient && !DEMO_TOKENS.includes(patient.token)
+  )
+
+      const remoteTokens = new Set(
+        remotePatients.map((patient) => patient.token)
+      )
+
+      // Keep local patients that are not yet in the shared database
+      const localOnlyPatients = localPatients.filter(
+  (patient) =>
+    patient &&
+    !DEMO_TOKENS.includes(patient.token) &&
+    !remoteTokens.has(patient.token)
+)
+
+      let mergedPatients
+
+      if (remotePatients.length === 0) {
+  // First device: migrate only genuine patient records
+  mergedPatients = localOnlyPatients
+} else {
+  // Other devices: use shared data and add missing local records
+  mergedPatients = [...remotePatients, ...localOnlyPatients]
+}
+
+      if (mergedPatients.length > 0) {
+        const rowsToSave =
+          remotePatients.length === 0
+            ? mergedPatients
+            : localOnlyPatients
+
+        if (rowsToSave.length > 0) {
+          const { error: saveError } = await supabase
+            .from('queue_patients')
+            .upsert(
+              rowsToSave.map((patient) => ({
+                token: patient.token,
+                patient_data: patient,
+                updated_at: new Date().toISOString(),
+              })),
+              { onConflict: 'token' }
+            )
+
+          if (saveError) throw saveError
+        }
+      }
+
+      if (!isMounted) return
+
+      setPatients(mergedPatients)
+      setQueueDatabaseReady(true)
+
+      // Listen for changes made by other devices
+      queueChannelRef.current = supabase
+        .channel('mediq-queue-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'queue_patients',
+          },
+          async () => {
+            const { data: latestData, error: latestError } = await supabase
+              .from('queue_patients')
+              .select('token, patient_data')
+
+            if (latestError) {
+              console.error('Realtime queue refresh failed:', latestError)
+              return
+            }
+
+           if (isMounted) {
+  const latestPatients = (latestData || [])
+  .map((row) => row.patient_data)
+  .filter(
+    (patient) =>
+      patient &&
+      !DEMO_TOKENS.includes(patient.token)
+  )
+  isApplyingRemoteUpdateRef.current = true
+  setPatients(latestPatients)
+}
+          }
+        )
+        .subscribe()
+
+    } catch (error) {
+      console.error('Supabase queue loading failed:', error)
+      setQueueDatabaseReady(false)
+    }
+  }
+
+  loadQueueFromSupabase()
+
+  return () => {
+    isMounted = false
+
+    if (queueChannelRef.current) {
+      supabase.removeChannel(queueChannelRef.current)
+      queueChannelRef.current = null
+    }
+  }
+}, [])
+
+useEffect(() => {
+  // Always maintain a local backup
+  localStorage.setItem('mediq_patients_v3', JSON.stringify(patients))
+
+  if (!queueDatabaseReady || !isSupabaseConfigured()) return
+  if (isApplyingRemoteUpdateRef.current) {
+  isApplyingRemoteUpdateRef.current = false
+  return
+}
+
+  // Avoid sending too many requests for rapid changes
+  if (queueSyncTimeoutRef.current) {
+    clearTimeout(queueSyncTimeoutRef.current)
+  }
+
+  queueSyncTimeoutRef.current = setTimeout(async () => {
+    const rows = patients.map((patient) => ({
+      token: patient.token,
+      patient_data: patient,
+      updated_at: new Date().toISOString(),
+    }))
+
+    if (rows.length === 0) return
+
+    const { error } = await supabase
+      .from('queue_patients')
+      .upsert(rows, { onConflict: 'token' })
+
+    if (error) {
+      console.error('Supabase queue sync failed:', error)
+    }
+  }, 500)
+
+  return () => {
+    if (queueSyncTimeoutRef.current) {
+      clearTimeout(queueSyncTimeoutRef.current)
+    }
+  }
+}, [patients, queueDatabaseReady])
 
   useEffect(() => {
     localStorage.setItem('mediq_departments_roster', JSON.stringify(departmentsList))
@@ -490,7 +677,12 @@ export function QueueProvider({ children }) {
         const match = p.token.match(/\d+/)
         return match ? parseInt(match[0], 10) : 100
       })
-    const maxNum = existing.length > 0 ? Math.max(...existing) : type === BookingType.WALK_IN ? 200 : 100
+    const maxNum =
+  existing.length > 0
+    ? Math.max(...existing)
+    : type === BookingType.WALK_IN
+      ? 202
+      : 104
     return `${prefix}-${maxNum + 1}`
   }
 
@@ -1221,25 +1413,37 @@ export function QueueProvider({ children }) {
   /**
    * UPDATE CLINICAL QUEUE STATUS (Doctor Consultation)
    */
-  const updatePatientStatus = (tokenId, newStatus) => {
-    setPatients((prev) =>
-      prev.map((pat) => {
-        if (pat.token === tokenId) {
-          return { ...pat, status: newStatus }
-        }
-        return pat
-      })
-    )
+  
+const updatePatientStatus = (tokenId, newStatus) => {
+  const patient = patients.find((p) => p.token === tokenId)
 
-    logAuditAction({
-      token: tokenId,
-      actor: 'Doctor / Clinical Staff',
-      action: `CLINICAL_QUEUE_${newStatus.toUpperCase()}`,
-      details: `Patient moved to status: ${newStatus}`,
-      previousStatus: 'in_queue',
-      newStatus,
-    })
+  if (!patient) {
+    return { success: false, message: 'Patient not found' }
   }
+
+  setPatients((prev) =>
+    prev.map((pat) =>
+      pat.token === tokenId
+        ? { ...pat, status: newStatus }
+        : pat
+    )
+  )
+
+  logAuditAction({
+    token: tokenId,
+    actor: 'Doctor / Clinical Staff',
+    action: `CLINICAL_QUEUE_${newStatus.toUpperCase()}`,
+    details: `Patient moved from ${patient.status} to ${newStatus}.`,
+    previousStatus: patient.status,
+    newStatus,
+  })
+
+  return {
+    success: true,
+    message: `Patient status updated to ${newStatus}.`,
+  }
+}
+
 
   /**
    * DYNAMIC DEPARTMENT STATS CALCULATION

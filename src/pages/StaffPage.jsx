@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -63,7 +64,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
     getDepartmentStats,
   } = useQueue()
 
-  // Active Main Role Tab: 'reception', 'departments', 'doctor', 'admin'
   const [activeTab, setActiveTab] = useState(initialTab)
 
   React.useEffect(() => {
@@ -72,49 +72,42 @@ export default function StaffPage({ initialTab = 'reception' }) {
     }
   }, [initialTab])
 
-  // Reception Booking Type Segment: 'all', 'online', 'walk_in'
   const [bookingTypeFilter, setBookingTypeFilter] = useState('all')
 
-  // Filters
   const [filterHospital, setFilterHospital] = useState('all')
   const [filterDept, setFilterDept] = useState('all')
   const [filterArrival, setFilterArrival] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Modals
   const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false)
   const [transferTargetPatient, setTransferTargetPatient] = useState(null)
   const [releasedSlotTarget, setReleasedSlotTarget] = useState(null)
 
-  // Doctor Portal Selection
   const [activeDoctorDept, setActiveDoctorDept] = useState('Cardiology')
   const [activeDoctorName, setActiveDoctorName] = useState('Dr. Sundar (Cardiologist)')
 
-  // Toast
   const [actionAlert, setActionAlert] = useState('')
   const handleActionToast = (msg) => {
     setActionAlert(msg)
     setTimeout(() => setActionAlert(''), 4500)
   }
 
-  // Handle Arrival Change (Arrived / Not Arrived / Late)
   const handleArrivalChange = (token, newStatus) => {
     const res = updateArrivalStatus(token, newStatus, 'Reception Desk')
     handleActionToast(res.message)
   }
 
-  // Handle Unclaimed Slot Release
   const handleReleaseSlot = (token) => {
     const res = releaseUnclaimedSlot(token, 'Reception Supervisor')
     handleActionToast(res.message)
   }
 
-  // Filtered Patients for Reception
   const filteredPatients = patients.filter((p) => {
     if (bookingTypeFilter !== 'all' && p.bookingType !== bookingTypeFilter) return false
     if (filterHospital !== 'all' && p.hospital !== filterHospital) return false
     if (filterDept !== 'all' && p.department !== filterDept) return false
     if (filterArrival !== 'all' && p.arrivalStatus !== filterArrival) return false
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       const matchToken = p.token.toLowerCase().includes(q)
@@ -124,17 +117,16 @@ export default function StaffPage({ initialTab = 'reception' }) {
       const matchPhone = p.phone && p.phone.includes(q)
       return matchToken || matchName || matchDept || matchId || matchPhone
     }
+
     return true
   })
 
-  // Counts
   const onlineCount = patients.filter((p) => p.bookingType === BookingType.ONLINE && p.status !== 'cancelled').length
   const walkInCount = patients.filter((p) => p.bookingType === BookingType.WALK_IN && p.status !== 'cancelled').length
   const arrivedCount = patients.filter((p) => p.arrivalStatus === ArrivalStatus.ARRIVED && p.status !== 'cancelled').length
   const lateCount = patients.filter((p) => p.arrivalStatus === ArrivalStatus.LATE && p.status !== 'cancelled').length
   const releasedSlotsList = patients.filter((p) => p.slotStatus === SlotStatus.RELEASED_AVAILABLE)
 
-  // Doctor Consultation Patients
   const doctorDeptConfig = departments.find((d) => d.name === activeDoctorDept) || departments[0]
   const currentDoctorObj = doctorDeptConfig.doctors.find((doc) => doc.name === activeDoctorName) || doctorDeptConfig.doctors[0]
 
@@ -149,7 +141,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
           p.bookingType === BookingType.WALK_IN)
     )
     .sort((a, b) => {
-      // P1 Emergency comes first!
       if (a.priority === 'P1' && b.priority !== 'P1') return -1
       if (b.priority === 'P1' && a.priority !== 'P1') return 1
       return 0
@@ -157,25 +148,22 @@ export default function StaffPage({ initialTab = 'reception' }) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      
-      {/* Page Title & Reception Action */}
+
+      {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-200 gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs font-bold text-teal-700 uppercase tracking-wider">
-              Multi-Hospital Queue Orchestration
+              Staff Control Panel
             </span>
           </div>
+
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-            Reception & Department Queue Console
+            Staff Dashboard
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Synchronized queue management for online appointments, walk-ins, and clinical departments.
-          </p>
         </div>
 
-        {/* Big Action: Walk-in Patient Registration */}
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setIsWalkInModalOpen(true)}
@@ -187,7 +175,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
         </div>
       </div>
 
-      {/* Action Toast Alert */}
+      {/* Action Toast */}
       {actionAlert && (
         <div className="p-3.5 bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold rounded-2xl flex items-center justify-between shadow-xs">
           <span>{actionAlert}</span>
@@ -255,13 +243,11 @@ export default function StaffPage({ initialTab = 'reception' }) {
         </button>
       </div>
 
-      {/* ======================================================== */}
-      {/* TAB 1: RECEPTIONIST DASHBOARD (Online & Walk-In Queues)   */}
-      {/* ======================================================== */}
+      {/* TAB 1: RECEPTION */}
       {activeTab === 'reception' && (
         <div className="space-y-6">
-          
-          {/* Released Slots Available Banner */}
+
+          {/* Released Slots */}
           {releasedSlotsList.length > 0 && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
               <div className="flex items-center gap-2.5">
@@ -271,10 +257,11 @@ export default function StaffPage({ initialTab = 'reception' }) {
                     {releasedSlotsList.length} Unclaimed Released Slot(s) Available!
                   </p>
                   <p className="text-amber-800 text-[11px]">
-                    Online slots released due to absence/grace expiry. Eligible walk-ins can utilize them without displacing confirmed patients.
+                    Available slots can be assigned to eligible walk-in patients.
                   </p>
                 </div>
               </div>
+
               <div className="flex items-center gap-2">
                 {releasedSlotsList.map((slot) => (
                   <button
@@ -290,9 +277,9 @@ export default function StaffPage({ initialTab = 'reception' }) {
             </div>
           )}
 
-          {/* Operational Metrics Cards */}
+          {/* Operational Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            
+
             <div
               onClick={() => setBookingTypeFilter(bookingTypeFilter === BookingType.ONLINE ? 'all' : BookingType.ONLINE)}
               className={`cursor-pointer bg-white rounded-2xl p-4 border transition-all ${
@@ -306,7 +293,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
               <div className="text-2xl font-extrabold text-teal-600 mt-1">
                 {onlineCount}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Pre-booked digital appointments</p>
             </div>
 
             <div
@@ -322,7 +308,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
               <div className="text-2xl font-extrabold text-cyan-600 mt-1">
                 {walkInCount}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Registered directly at desk</p>
             </div>
 
             <div
@@ -338,7 +323,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
               <div className="text-2xl font-extrabold text-emerald-600 mt-1">
                 {arrivedCount}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Present in hospital lobby</p>
             </div>
 
             <div
@@ -354,17 +338,18 @@ export default function StaffPage({ initialTab = 'reception' }) {
               <div className="text-2xl font-extrabold text-amber-600 mt-1">
                 {lateCount}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">Past slot time ({gracePeriodMinutes}m grace)</p>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {gracePeriodMinutes}m grace
+              </p>
             </div>
 
           </div>
 
-          {/* Segment Filter & Search Bar */}
+          {/* Filters & Search */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs space-y-3">
-            
+
             <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-              
-              {/* Booking Type Segment Toggle */}
+
               <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
                 <button
                   onClick={() => setBookingTypeFilter('all')}
@@ -392,21 +377,19 @@ export default function StaffPage({ initialTab = 'reception' }) {
                 </button>
               </div>
 
-              {/* Search Bar */}
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by Patient ID, Token, Name, or Mobile..."
+                  placeholder="Search by token, name, ID or mobile..."
                   className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
                 />
               </div>
 
             </div>
 
-            {/* Sub-Filters: Hospital, Department, Arrival */}
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
               <span className="text-slate-400 font-medium">Filter by:</span>
 
@@ -449,12 +432,12 @@ export default function StaffPage({ initialTab = 'reception' }) {
 
           </div>
 
-          {/* Patient Cards List */}
+          {/* Patient List */}
           <div className="space-y-3">
             {filteredPatients.length === 0 ? (
               <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 space-y-2">
                 <Users className="w-8 h-8 text-slate-300 mx-auto" />
-                <p className="text-xs text-slate-500 font-medium">No patient records found matching current criteria.</p>
+                <p className="text-xs text-slate-500 font-medium">No patient records found.</p>
               </div>
             ) : (
               filteredPatients.map((patient) => {
@@ -475,11 +458,9 @@ export default function StaffPage({ initialTab = 'reception' }) {
                         : 'border-slate-200 hover:border-slate-300 shadow-xs'
                     }`}
                   >
-                    
-                    {/* Left: Token, Profile ID, Patient Info */}
+
                     <div className="flex items-start gap-4">
-                      
-                      {/* Big Token Badge */}
+
                       <div className="text-center px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 shrink-0">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                           {isOnline ? 'Online' : 'Walk-in'}
@@ -498,8 +479,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
                             {patient.patientName}
                           </h4>
                           {patient.age && <span className="text-xs text-slate-500">({patient.age} yrs)</span>}
-                          
-                          {/* Booking Type Pill */}
+
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                               isOnline
@@ -510,12 +490,10 @@ export default function StaffPage({ initialTab = 'reception' }) {
                             {isOnline ? 'Online Appointment' : 'Walk-In'}
                           </span>
 
-                          {/* Department Pill */}
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                             {patient.department}
                           </span>
 
-                          {/* Priority */}
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                               patient.priority === 'P1'
@@ -541,12 +519,12 @@ export default function StaffPage({ initialTab = 'reception' }) {
                           <strong>Chief Complaint:</strong> {patient.symptoms}
                         </p>
 
-                        {/* Released / Reassigned Notice */}
                         {patient.slotStatus === SlotStatus.REASSIGNED_TO_WALKIN && (
                           <p className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
                             Slot reassigned to walk-in token: {patient.reassignedToToken}
                           </p>
                         )}
+
                         {patient.fastTrackedFromSlot && (
                           <p className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 inline-block">
                             Fast-tracked into released slot from {patient.fastTrackedFromSlot}
@@ -555,14 +533,14 @@ export default function StaffPage({ initialTab = 'reception' }) {
                       </div>
                     </div>
 
-                    {/* Middle: Arrival Status Segment Control */}
+                    {/* Arrival Control */}
                     <div className="flex flex-col sm:flex-row items-center gap-3 text-xs">
-                      
+
                       <div className="text-center space-y-1">
                         <span className="text-[10px] text-slate-400 font-bold block uppercase">
                           Arrival Control
                         </span>
-                        
+
                         <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-[11px] font-bold">
                           <button
                             onClick={() => handleArrivalChange(patient.token, ArrivalStatus.ARRIVED)}
@@ -593,10 +571,9 @@ export default function StaffPage({ initialTab = 'reception' }) {
 
                     </div>
 
-                    {/* Right: Actions (Transfer Department, Release Slot, Call) */}
+                    {/* Patient Actions */}
                     <div className="flex flex-wrap items-center gap-2 self-end lg:self-auto text-xs">
-                      
-                      {/* Department Transfer Button */}
+
                       <button
                         onClick={() => setTransferTargetPatient(patient)}
                         className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold flex items-center gap-1.5 transition-colors"
@@ -606,7 +583,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
                         <span>Transfer Dept</span>
                       </button>
 
-                      {/* Release Slot for Late Patient (With Safety check) */}
                       {isLate && patient.slotStatus !== SlotStatus.RELEASED_AVAILABLE && patient.status === 'waiting' && (
                         <button
                           onClick={() => handleReleaseSlot(patient.token)}
@@ -618,7 +594,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
                         </button>
                       )}
 
-                      {/* If Slot is Released: Fast Assign to Walk-in */}
                       {isSlotReleased && (
                         <button
                           onClick={() => setReleasedSlotTarget(patient)}
@@ -649,17 +624,15 @@ export default function StaffPage({ initialTab = 'reception' }) {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* TAB 2: DEPARTMENT LIVE QUEUES (Separated per department) */}
-      {/* ======================================================== */}
+      {/* TAB 2: DEPARTMENT QUEUES */}
       {activeTab === 'departments' && (
         <div className="space-y-6">
           <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl flex items-center justify-between text-xs text-teal-900">
             <div className="flex items-center gap-2.5">
               <Hospital className="w-5 h-5 text-teal-600" />
               <div>
-                <p className="font-bold text-sm">Separated Live Department Queues</p>
-                <p className="text-teal-700">Each department operates its own autonomous live queue and doctor assignment.</p>
+                <p className="font-bold text-sm">Department Live Queues</p>
+                <p className="text-teal-700">Live queues and doctor availability by department.</p>
               </div>
             </div>
             <span className="font-bold bg-white px-3 py-1 rounded-xl border border-teal-200 text-teal-800">
@@ -702,7 +675,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
                       </div>
                     </div>
 
-                    {/* Doctors in this department */}
                     <div className="space-y-1.5 pt-1">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Specialists</span>
                       {dept.doctors.map((doc) => (
@@ -724,7 +696,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
                     </div>
                   </div>
 
-                  {/* Action */}
                   <div className="pt-2">
                     <button
                       onClick={() => {
@@ -744,16 +715,12 @@ export default function StaffPage({ initialTab = 'reception' }) {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* TAB 3: DOCTOR CONSULTATION ROOM (Call Next / Doctor Sync) */}
-      {/* ======================================================== */}
+      {/* TAB 3: DOCTOR CONSULTATION */}
       {activeTab === 'doctor' && (
         <div className="space-y-6">
-          
-          {/* Doctor Controls & Status Sync */}
+
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-            
-            {/* Dept & Doctor Switcher */}
+
             <div className="flex flex-wrap items-center gap-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
@@ -786,10 +753,9 @@ export default function StaffPage({ initialTab = 'reception' }) {
               </div>
             </div>
 
-            {/* Doctor Availability Toggle (Synchronized with Reception!) */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500 font-medium">Doctor Status:</span>
-              
+
               <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
                 <button
                   onClick={() => updateDoctorAvailability(doctorDeptConfig.id, currentDoctorObj.id, DoctorStatus.AVAILABLE)}
@@ -823,7 +789,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
 
           </div>
 
-          {/* Doctor Patient Queue */}
+          {/* Doctor Queue */}
           <div className="space-y-3">
             <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
               <Stethoscope className="w-4 h-4 text-teal-600" />
@@ -833,7 +799,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
             {doctorPatients.length === 0 ? (
               <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 space-y-2">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                <p className="text-xs text-slate-500 font-medium">All patients in {activeDoctorDept} have been seen!</p>
+                <p className="text-xs text-slate-500 font-medium">No patients waiting.</p>
               </div>
             ) : (
               doctorPatients.map((patient, index) => {
@@ -886,7 +852,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
                     </div>
 
                     <div className="flex items-center gap-2 self-end md:self-auto">
-                      {/* Transfer Dept button */}
+
                       <button
                         onClick={() => setTransferTargetPatient(patient)}
                         className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
@@ -925,21 +891,18 @@ export default function StaffPage({ initialTab = 'reception' }) {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* TAB 4: HOSPITAL ADMIN & AUDIT LOG                         */}
-      {/* ======================================================== */}
+      {/* TAB 4: HOSPITAL ADMIN */}
       {activeTab === 'admin' && (
         <div className="space-y-6">
-          
-          {/* Admin Config: Grace Period */}
+
           <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-0.5">
               <h4 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                 <Settings className="w-4 h-4 text-teal-600" />
-                <span>Configurable Grace Period for Unclaimed Appointments</span>
+                <span>Configurable Grace Period</span>
               </h4>
               <p className="text-xs text-slate-500">
-                Time to wait before releasing an absent online appointment slot to eligible walk-in patients.
+                Set the waiting time before releasing an unclaimed appointment slot.
               </p>
             </div>
 
@@ -963,11 +926,11 @@ export default function StaffPage({ initialTab = 'reception' }) {
             </div>
           </div>
 
-          {/* Audit History Log Table */}
+          {/* Audit Log */}
           <div className="space-y-3">
             <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
               <Lock className="w-4 h-4 text-teal-600" />
-              <span>HIPAA Compliant System Audit Log ({auditLogs.length} Records)</span>
+              <span>System Audit Log ({auditLogs.length} Records)</span>
             </h4>
 
             <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
@@ -1009,7 +972,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
         </div>
       )}
 
-      {/* MODAL 1: Walk-In Registration */}
+      {/* Walk-In Registration */}
       <WalkInRegistrationModal
         isOpen={isWalkInModalOpen}
         onClose={() => setIsWalkInModalOpen(false)}
@@ -1018,7 +981,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
         }}
       />
 
-      {/* MODAL 2: Department Transfer */}
+      {/* Department Transfer */}
       <DepartmentTransferModal
         isOpen={Boolean(transferTargetPatient)}
         patient={transferTargetPatient}
@@ -1026,7 +989,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
         onTransferred={(msg) => handleActionToast(msg)}
       />
 
-      {/* MODAL 3: Released Slot Reassignment */}
+      {/* Released Slot Reassignment */}
       <ReleasedSlotAssignModal
         isOpen={Boolean(releasedSlotTarget)}
         releasedPatient={releasedSlotTarget}
