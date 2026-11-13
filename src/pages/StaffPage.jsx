@@ -87,6 +87,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
   const [activeDoctorName, setActiveDoctorName] = useState('Dr. Sundar (Cardiologist)')
 
   const [actionAlert, setActionAlert] = useState('')
+
   const handleActionToast = (msg) => {
     setActionAlert(msg)
     setTimeout(() => setActionAlert(''), 4500)
@@ -102,7 +103,14 @@ export default function StaffPage({ initialTab = 'reception' }) {
     handleActionToast(res.message)
   }
 
+  // Only active patients should appear in operational queues.
+  // Completed and cancelled records remain saved for history and audit.
+  const isActivePatient = (patient) =>
+    patient.status !== 'completed' && patient.status !== 'cancelled'
+
   const filteredPatients = patients.filter((p) => {
+    if (!isActivePatient(p)) return false
+
     if (bookingTypeFilter !== 'all' && p.bookingType !== bookingTypeFilter) return false
     if (filterHospital !== 'all' && p.hospital !== filterHospital) return false
     if (filterDept !== 'all' && p.department !== filterDept) return false
@@ -115,20 +123,41 @@ export default function StaffPage({ initialTab = 'reception' }) {
       const matchDept = p.department.toLowerCase().includes(q)
       const matchId = p.patientId && p.patientId.toLowerCase().includes(q)
       const matchPhone = p.phone && p.phone.includes(q)
+
       return matchToken || matchName || matchDept || matchId || matchPhone
     }
 
     return true
   })
 
-  const onlineCount = patients.filter((p) => p.bookingType === BookingType.ONLINE && p.status !== 'cancelled').length
-  const walkInCount = patients.filter((p) => p.bookingType === BookingType.WALK_IN && p.status !== 'cancelled').length
-  const arrivedCount = patients.filter((p) => p.arrivalStatus === ArrivalStatus.ARRIVED && p.status !== 'cancelled').length
-  const lateCount = patients.filter((p) => p.arrivalStatus === ArrivalStatus.LATE && p.status !== 'cancelled').length
-  const releasedSlotsList = patients.filter((p) => p.slotStatus === SlotStatus.RELEASED_AVAILABLE)
+  // All dashboard counts now include active patients only.
+  const onlineCount = patients.filter(
+    (p) => isActivePatient(p) && p.bookingType === BookingType.ONLINE
+  ).length
 
-  const doctorDeptConfig = departments.find((d) => d.name === activeDoctorDept) || departments[0]
-  const currentDoctorObj = doctorDeptConfig.doctors.find((doc) => doc.name === activeDoctorName) || doctorDeptConfig.doctors[0]
+  const walkInCount = patients.filter(
+    (p) => isActivePatient(p) && p.bookingType === BookingType.WALK_IN
+  ).length
+
+  const arrivedCount = patients.filter(
+    (p) => isActivePatient(p) && p.arrivalStatus === ArrivalStatus.ARRIVED
+  ).length
+
+  const lateCount = patients.filter(
+    (p) => isActivePatient(p) && p.arrivalStatus === ArrivalStatus.LATE
+  ).length
+
+  // Released slots belong here even though their original booking is cancelled.
+  const releasedSlotsList = patients.filter(
+    (p) => p.slotStatus === SlotStatus.RELEASED_AVAILABLE
+  )
+
+  const doctorDeptConfig =
+    departments.find((d) => d.name === activeDoctorDept) || departments[0]
+
+  const currentDoctorObj =
+    doctorDeptConfig.doctors.find((doc) => doc.name === activeDoctorName) ||
+    doctorDeptConfig.doctors[0]
 
   const doctorPatients = patients
     .filter(
@@ -179,7 +208,12 @@ export default function StaffPage({ initialTab = 'reception' }) {
       {actionAlert && (
         <div className="p-3.5 bg-teal-50 border border-teal-200 text-teal-900 text-xs font-semibold rounded-2xl flex items-center justify-between shadow-xs">
           <span>{actionAlert}</span>
-          <button onClick={() => setActionAlert('')} className="text-teal-700 font-bold ml-2">✕</button>
+          <button
+            onClick={() => setActionAlert('')}
+            className="text-teal-700 font-bold ml-2"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -196,7 +230,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
           <Building className="w-4 h-4" />
           <span>Receptionist Dashboard</span>
           <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-slate-200 text-slate-700">
-            {patients.filter((p) => p.status !== 'cancelled').length} Active
+            {patients.filter(isActivePatient).length} Active
           </span>
         </button>
 
@@ -357,7 +391,7 @@ export default function StaffPage({ initialTab = 'reception' }) {
                     bookingTypeFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  All Patients ({patients.length})
+                  All Patients ({patients.filter(isActivePatient).length})
                 </button>
                 <button
                   onClick={() => setBookingTypeFilter(BookingType.ONLINE)}
@@ -643,9 +677,6 @@ export default function StaffPage({ initialTab = 'reception' }) {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {departments.map((dept) => {
               const stats = getDepartmentStats(hospitals[0].name, dept.name)
-              const deptPatients = patients.filter(
-                (p) => p.department === dept.name && p.status === 'waiting'
-              )
 
               return (
                 <div key={dept.id} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4 flex flex-col justify-between">
